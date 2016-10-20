@@ -5,7 +5,7 @@
 include_once PATH_MODULOS . "DirectorioRCJA/SincronizacionDirectorioRCJA.class.php";
 include_once PATH_MODULOS . "DirectorioRCJA/FichaUsuarioRCJA.class.php";
 include_once PATH_MODULOS . "DirectorioRCJA/FichaExtensionRCJA.class.php";
-//include_once PATH_MODULOS . "DirectorioRCJA/UsuariosEstanEnTauNoEstanEnRCJA.class.php";
+include_once PATH_MODULOS . "Inventario2/FichaUsuario.class.php";
 
 
 class DirectorioRCJA {
@@ -33,14 +33,7 @@ class DirectorioRCJA {
 		Presentacion::titulo("DIRECTORIO RCJA");
 		$this->includeJavaScript();
 		$this->menuPrincipal();
-	}
-        
-        function prueba($param) {
-		Presentacion::titulo("mi módulo");
-		$this->includeJavaScript();
-                $sincronizar = new SincronizacionDirectorioRCJA();
-		$sincronizar->prueba();
-	}
+	}        
 	
 	function reentrada($param) {
  //echo "<br>reentrada ";

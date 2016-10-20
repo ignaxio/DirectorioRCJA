@@ -10,6 +10,7 @@ class UsuarioRCJA extends BusquedaAvanzadaAbstracta implements FabricarVista {
         var $name = __CLASS__;
         var $desc = "UsuarioRCJA";
         private $empleado = "";
+        private $idTAU = "";
         private $nombre = "";
         private $NIF = "";
         private $perfilUsuario = "";
@@ -77,7 +78,18 @@ class UsuarioRCJA extends BusquedaAvanzadaAbstracta implements FabricarVista {
                 $this->empleado = $empleado;
                 return $old;
         }
+        
+        function getIdTAU() {
+                return $this->idTAU;
+        }
 
+        function setIdTAU($idTAU) {
+                $old = $this->idTAU;
+                $this->idTAU = $idTAU;
+                return $old;
+        }
+
+        
         public function getNombre() {
                 return $this->nombre;
         }
@@ -231,23 +243,22 @@ class UsuarioRCJA extends BusquedaAvanzadaAbstracta implements FabricarVista {
 //		$this->debug($this->SQL);
                 return $this->SQL;
         }
-
-        public function buscaUsuariosEstanEnTauNoEstanEnRCJA() {
-                $usuariosRCJA = array();
-                $SQLusuariosRCJA = $this->busca();
-                
-                //Vamos a recoger los usuarios de RCJA que tenemos en la basse de datos.
-                $this->conn = TAU::conectaDBMysql();
-                mysql_select_db('TAU');
-                $result = mysql_query($SQLusuariosRCJA);
-                while ($usuario = @mysql_fetch_array($result)) {   
-                        print_r($usuario);
-//                        $usuariosRCJA[] = $this->leerCampos($usuario);
+        
+        public function buscaPorIdes($ids, $campo, $orden) {
+                // Vamos ha buscar todos los usuarios que vengan en el arary.
+                $this->SQL = "SELECT empleado, nif, nombre";
+                $this->SQL .= " FROM rcja_usuarios";
+                $contador = 0;
+                foreach ($ids as $id) {
+                        if($contador == 0) {
+                                $this->SQL .= " WHERE empleado = '{$id['idRCJA']}'";
+                        }
+                        $this->SQL .= " OR empleado = '{$id['idRCJA']}'";
+                        $contador++;
                 }
-                mysql_free_result($result);
-                // Cerrar la conexión
-                mysql_close($this->conn);
-//                print_r($usuariosRCJA);
+                $this->SQL .= " ORDER BY {$this->campos[$campo]} {$this->ordenes[$orden]};";
+//                $this->debug($this->SQL);
+                return $this->SQL;
         }
 
         ////
@@ -284,36 +295,34 @@ class UsuarioRCJA extends BusquedaAvanzadaAbstracta implements FabricarVista {
                 return $this->getNIF();
         }
 
-        public function leerCampos($fila) {
-                if (!$fila) {
-                        $fila = array('empleado' => '?',
-                                'nombre' => '?',
-                                'nif' => '?',
-                                'perfil_Usuario' => '?',
-                                'etiqueta_Emp' => '?',
-                                'observaciones_Emp' => '?',
-                                'centro_Directivo_Depart' => '?',
-                                'centro_Trabajo' => '?',
-                                'puesto_Trabajo' => '?',
-                                'servicio' => '?',
-                                'tipo_Usuario' => '?',
-                                'grupo_Nivel' => '?',
+        public function getUsuarios($conn) {
+                $SQL = "SELECT empleado, nombre, nif FROM rcja_usuarios";
+                $empleados = array();
+                $result = TAU::ejecutarSQL($conn, $SQL);
+                while (odbc_fetch_row($result)) {
+                        $empleados[odbc_result($result, 'empleado')] = array(
+                                'nombre' => odbc_result($result, 'nombre'),
+                                'nif' => odbc_result($result, 'nif')
                         );
                 }
-//		$this->debug($fila);
+//                odbc_close($this->conn);
+                return $empleados;
+        }
 
-                $this->setEmpleado($fila["empleado"]);
-                $this->setNombre($fila["nombre"]);
-                $this->setNIF($fila["nif"]);
-                $this->setPerfilUsuario($fila["perfil_Usuario"]);
-                $this->setEtiquetaEmp($fila["etiqueta_Emp"]);
-                $this->setObservacionesEmp($fila["observaciones_Emp"]);
-                $this->setCentroDirectivoDepart($fila["centro_Directivo_Depart"]);
-                $this->setCentroTrabajo($fila["centro_Trabajo"]);
-                $this->setPuestoTrabajo($fila["puesto_Trabajo"]);
-                $this->setServicio($fila["servicio"]);
-                $this->setTipoUsuario($fila["tipo_Usuario"]);
-                $this->setGrupoNivel($fila["grupo_Nivel"]);
+        public function leerCampos($fila) {
+                $this->setEmpleado(isset($fila["empleado"]) ? $fila["empleado"] : '?');
+                $this->setIdTAU(isset($fila["id_Usuario"]) ? $fila["id_Usuario"] : '?');
+                $this->setNombre(isset($fila["nombre"]) ? $fila["nombre"] : '?');
+                $this->setNIF(isset($fila["nif"]) ? $fila["nif"] : '?');
+                $this->setPerfilUsuario(isset($fila["perfil_Usuario"]) ? $fila["perfil_Usuario"] : '?');
+                $this->setEtiquetaEmp(isset($fila["etiqueta_Emp"]) ? $fila["etiqueta_Emp"] : '?');
+                $this->setObservacionesEmp(isset($fila["observaciones_Emp"]) ? $fila["observaciones_Emp"] : '?');
+                $this->setCentroDirectivoDepart(isset($fila["centro_Directivo_Depart"]) ? $fila["centro_Directivo_Depart"] : '?');
+                $this->setCentroTrabajo(isset($fila["centro_Trabajo"]) ? $fila["centro_Trabajo"] : '?');
+                $this->setPuestoTrabajo(isset($fila["puesto_Trabajo"]) ? $fila["puesto_Trabajo"] : '?');
+                $this->setServicio(isset($fila["servicio"]) ? $fila["servicio"] : '?');
+                $this->setTipoUsuario(isset($fila["tipo_Usuario"]) ? $fila["tipo_Usuario"] : '?');
+                $this->setGrupoNivel(isset($fila["grupo_Nivel"]) ? $fila["grupo_Nivel"] : '?');
         }
 
         function debug($param = NULL) {

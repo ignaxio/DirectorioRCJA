@@ -6,7 +6,7 @@ include_once PATH_MODULOS . "DirectorioRCJA/SincronizacionConTercerosSistemas.in
 include_once PATH_MODULOS . "DirectorioRCJA/WS/WSDirectorioRCJA.class.php";
 include_once PATH_MODULOS . "DirectorioRCJA/UsuarioRCJA.class.php";
 include_once PATH_MODULOS . "DirectorioRCJA/ExtensionRCJA.class.php";
-include_once PATH_MODULOS . "Inventario2/Usuarios.class.php";
+include_once PATH_MODULOS . "Inventario2/Usuario.class.php";
 
 class SincronizacionDirectorioRCJA implements SincronizacionConTercerosSistemas {
 
@@ -303,148 +303,89 @@ class SincronizacionDirectorioRCJA implements SincronizacionConTercerosSistemas 
          */
         public function obtenerUsuariosAmbosSistemas() {
                 // Aquí hay que coger todos los usuarios y almacenarlos en dos arrays
-                $this->getUsuarioRCJA();
-                $this->getUsuariosTAU();
+                $usuarioRCJA = new UsuarioRCJA();
+                $usuariosRCJA = $usuarioRCJA->getUsuarios($this->conn);
 
-                $usuariosNombreApellidosSimilar = array();
-                $usuariosDniSimilar = array();
-                $usuariosFullMatching = array();
-                foreach ($this->usuariosTAU as $keyUsuarioTAU => $usuarioTAU) {
-                        foreach ($this->usuariosRCJA as $keyUsuarioRCJA => $usuarioRCJA) {
-                                // Primero buscamos los fullMatching
-                                if ($this->checkUsuariosConFullMatching($usuarioTAU, $usuarioRCJA)) {
-                                        $usuariosFullMatching[$usuarioTAU->getID()] = array(
-                                                'usuarioTAU' => $usuarioTAU,
-                                                'usuarioRCJA' => $usuarioRCJA
-                                        );
-                                        // Saltamos al siguiente usuario para que no analice en los siguientes pasos  
-                                        break;
+                $usuarioTAU = new Usuario();
+                $usuariosTAU = $usuarioTAU->getUsuarios();
+
+                $usuariosDeLosDosSitios = array();
+                foreach ($usuariosTAU as $keyUsuarioTAU => $usuarioTAU) {
+                        foreach ($usuariosRCJA as $keyUsuarioRCJA => $usuarioRCJA) {
+                                $esta = false;
+                                if ($this->checkUsuariosDniSimilar($usuarioTAU['DNI'], $usuarioRCJA['nif'], 80)) {
+                                        // Ahora los que tienen un DNI similar o igual
+                                        $esta = true;
+                                } elseif ($this->checkUsuariosNombreApellidosSimilar($usuarioTAU, $usuarioRCJA['nombre'], 80)) {
+                                        // Ahora los que tienen un nombre y apellidos similares o iguales
+                                        $esta = true;
+                                } elseif ($this->checkUsuariosEmailSimilar($usuarioTAU['Email'], $keyUsuarioRCJA, 80)) {
+                                        // Ahora vamos a buscar por emails
+                                        $esta = true;
                                 }
-                                // Ahora los que tienen un DNI similar o igual
-                                if ($this->checkUsuariosDniSimilar($usuarioTAU, $usuarioRCJA, 80)) {
-                                        $usuariosDniSimilar[$usuarioTAU->getID()] = array(
-                                                'usuarioTAU' => $usuarioTAU,
-                                                'usuarioRCJA' => $usuarioRCJA
-                                        );
-                                }
-                                // Ahora los que tienen un nombre y apellidos similares o iguales
-                                if ($this->checkUsuariosNombreApellidosSimilar($usuarioTAU, $usuarioRCJA, 80)) {
-                                        $usuariosNombreApellidosSimilar[$usuarioTAU->getID()] = array(
-                                                'usuarioTAU' => $usuarioTAU,
-                                                'usuarioRCJA' => $usuarioRCJA
+                                if ($esta) {
+                                        $usuariosDeLosDosSitios[$keyUsuarioRCJA] = array(
+                                                'idTAU' => $keyUsuarioTAU,
+                                                'idRCJA' => $keyUsuarioRCJA
                                         );
                                 }
                         }
                 }
-                return array(
-                        'DNI' => $usuariosDniSimilar,
-                        'ApellidosyNombre' => $usuariosNombreApellidosSimilar,
-                        'FULL-MATCHING' => $usuariosFullMatching
-                );
+                return $usuariosDeLosDosSitios;
         }
 
         /**
-         * Función que inicia una conexión a la Base de Datos
+         * Función que analiza el campo email de TAU y el campo empleado de RCJA para hallar semejanzas 
+         * devolviendo true si está dentro del porcentaje dado.
+         * 
+         * @param String $emailTAU
+         * @param String $empleadoRCJA
+         * @param Int $porcentajeRequerido
+         * @return array
          */
-        private function iniciarDBConexion() {
-                $this->conn = TAU::conectaDBMysql();
-                mysql_select_db('TAU');
-        }
+        private function checkUsuariosEmailSimilar($emailTAU, $empleadoRCJA, $porcentajeRequerido) {
+                // Para hacer bien la comparación hay que quitarle al email de tau desde el @ al final.
+                $posicion = strpos($emailTAU, '@');
+                $empleadoTAU = substr($emailTAU, 0, $posicion);
 
-        /**
-         * Función que cierra y libera una conexión a la Base de Datos
-         * @param String $result
-         */
-        private function cerrarDBConexion($result) {
-                //Liberamos la consulta
-                @mysql_free_result($result);
-                // Cerrar la conexión
-                mysql_close($this->conn);
-        }
-        
-        public function prueba() {
-                $usuarios = new UsuariosRCJA();
-                $SQLusuariosRCJA = $usuarios->busca();
-                $resultado = TAU::ejecutarSQL($this->conn, $SQLusuariosRCJA);
-                
-                
-                
-                
-                print_r($resultado);
-        }
-
-        /**
-         * Función que carga en el array usuariosRCJA los usuarios de este tipo
-         */
-        private function getUsuarioRCJA() {
-                $this->iniciarDBConexion();
-
-                // Recogemos los usuarios de RCJA que tenemos en la Base de Datos
-                $usuarios = new UsuariosRCJA();
-                $SQLusuariosRCJA = $usuarios->busca();
-                $result = mysql_query($SQLusuariosRCJA);
-                while ($row = mysql_fetch_array($result)) {
-                        $usuarioRCJA = new UsuarioRCJA();
-                        // Metemos los datos en la clase
-                        $usuarioRCJA->leerCampos($row);
-                        // Vamos llenando el array
-                        $this->usuariosRCJA[] = $usuarioRCJA;
-                }
-                $this->cerrarDBConexion($result);
-        }
-
-        /**
-         * Función que carga en el array usuariosTAU los usuarios de este tipo
-         */
-        private function getUsuariosTAU() {
-                $this->iniciarDBConexion();
-
-                // Ahora los usuarios de TAU  que están en la Base de Datos "inventario".
-                mysql_select_db('inventario');
-                $usuarios = new Usuarios();
-                $SQLusuarios = $usuarios->busca();
-                // Conectamos a BBDD
-                $result = mysql_query($SQLusuarios);
-                while ($row = @mysql_fetch_array($result)) {
-                        $usuarioTAU = new Usuario();
-                        // Metemos los datos en la clase
-                        $usuarioTAU->leerCampos($row);
-                        // Vamos llenando el array
-                        $this->usuariosTAU[] = $usuarioTAU;
-                }
-                $this->cerrarDBConexion($result);
+                $percent = 0;
+                similar_text($empleadoTAU, $empleadoRCJA, $percent);
+                return ($porcentajeRequerido <= $percent) ? true : false;
         }
 
         /**
          * Función que analiza los nombres y apellidos de los usuarios para devolver los similares según el porcentaje pasado
-         * @param Usuario $usuarioTAU
-         * @param UsuarioRCJA $usuarioRCJA
-         * @param int $porcentajeRequerido
-         * @return boolean
+         * 
+         * @param array $usuarioTAU
+         * @param String $nombreRCJA
+         * @param Int $porcentajeRequerido
+         * @return array
          */
-        private function checkUsuariosNombreApellidosSimilar($usuarioTAU, $usuarioRCJA, $porcentajeRequerido) {
+        private function checkUsuariosNombreApellidosSimilar($usuarioTAU, $nombreRCJA, $porcentajeRequerido) {
                 $percent = 0;
                 // Vamos a montar los nombres y apellidos y compararlos...
-                $nombreTAU = trim($usuarioTAU->getNombre()) . ' ' . trim($usuarioTAU->getApellidos());
-                similar_text($nombreTAU, trim($usuarioRCJA->getNombre()), $percent);
+                $nombreTAU = trim($usuarioTAU['Nombre']) . ' ' . trim($usuarioTAU['Apellidos']);
+                similar_text($nombreTAU, trim($nombreRCJA), $percent);
                 return ($porcentajeRequerido <= $percent) ? true : false;
         }
 
         /**
-         * Función que analiza dos usuarios para hallar aquellos que tengan un DNI parecido dentro de un porcentaje de semejanza.
-         * @param Usuario $usuarioTAU
-         * @param UsuarioRCJA $usuarioRCJA
-         * @param int $porcentajeRequerido
-         * @return boolean
+         * Función que analiza dos dni's para hallar aquellos que tengan un parecido dentro de un porcentaje de semejanza.
+         * 
+         * @param String $nifTAU
+         * @param String $nifRCJA
+         * @param Int $porcentajeRequerido
+         * @return array
          */
-        private function checkUsuariosDniSimilar($usuarioTAU, $usuarioRCJA, $porcentajeRequerido) {
+        private function checkUsuariosDniSimilar($nifTAU, $nifRCJA, $porcentajeRequerido) {
                 $percent = 0;
-                similar_text($this->getNumerosDNI($usuarioTAU->getDNI()), $this->getNumerosDNI($usuarioRCJA->getNIF()), $percent);
+                similar_text($this->getNumerosDNI($nifTAU), $this->getNumerosDNI($nifRCJA), $percent);
                 return ($porcentajeRequerido <= $percent) ? true : false;
         }
 
         /**
-         * Función que analiza dos usuarios para hallar aquellos que tengan el mismo DNI y el mismo nombre y apellidos.       
+         * Función que analiza dos usuarios para hallar aquellos que tengan el mismo DNI y el mismo nombre y apellidos. 
+         *       
          * @param Usuario $usuarioTAU
          * @param UsuarioRCJA $usuarioRCJA
          * @return boolean
@@ -461,6 +402,7 @@ class SincronizacionDirectorioRCJA implements SincronizacionConTercerosSistemas 
         /**
          * Función que analiza un número de DNI quitandole la letra y añadiendo los ceros delante que necesite 
          * hasta completar los ocho dígitos.
+         * 
          * @param string $dni
          * @return string
          */
